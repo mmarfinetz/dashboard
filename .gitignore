@@ -34,4 +34,5 @@ node_modules/
 # OS specific
 # Task files
 tasks.json
-tasks/ client_secret.json
+tasks/
+client_secret.json
