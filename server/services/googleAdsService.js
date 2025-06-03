@@ -99,7 +99,8 @@ export async function fetchGoogleAdsData(startDate, endDate, forceRefresh = fals
     // Check if we're explicitly told to use mock data
     if (process.env.USE_MOCK_DATA === 'true') {
       console.log('Using mock Google Ads data');
-      return generateMockGoogleAdsData(startDate, endDate);
+      const mockData = generateMockGoogleAdsData(startDate, endDate);
+      return { ...mockData, mock: true }; // Add a flag to indicate this is mock data
     }
 
     console.log('Fetching real Google Ads data for period:', startDate, 'to', endDate);
@@ -199,7 +200,8 @@ export async function fetchGoogleAdsData(startDate, endDate, forceRefresh = fals
     // Only fallback to mock data if USE_MOCK_DATA_FALLBACK is enabled
     if (process.env.USE_MOCK_DATA_FALLBACK === 'true') {
       console.warn('Falling back to mock Google Ads data due to error');
-      return generateMockGoogleAdsData(startDate, endDate);
+      const mockData = generateMockGoogleAdsData(startDate, endDate);
+      return { ...mockData, mock: true }; // Add a flag to indicate this is mock data
     }
     
     // Otherwise, propagate the enhanced error

@@ -478,6 +478,14 @@ const Dashboard = () => {
         }
         
         const fetchedData = await response.json();
+        
+        // Check if data is mock data and set it
+        const isMockData = fetchedData.mock === true;
+        if (isMockData) {
+          console.warn('Google Ads API is returning MOCK data instead of real data');
+          setDataError(prev => ({...prev, google: 'Using mock data - real data unavailable'}));
+        }
+        
         setGoogleAdsData(fetchedData);
         setLoadingState(prev => ({...prev, google: false}));
       } catch (err) {
@@ -509,6 +517,14 @@ const Dashboard = () => {
         }
         
         const fetchedData = await response.json();
+        
+        // Check if data is mock data and set it
+        const isMockData = fetchedData.mock === true;
+        if (isMockData) {
+          console.warn('Facebook API is returning MOCK data instead of real data');
+          setDataError(prev => ({...prev, facebook: 'Using mock data - real data unavailable'}));
+        }
+        
         setFacebookAdsData(fetchedData);
         setLoadingState(prev => ({...prev, facebook: false}));
       } catch (err) {

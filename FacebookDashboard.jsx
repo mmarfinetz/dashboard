@@ -499,11 +499,18 @@ const FacebookDashboard = ({ preloadedData, isLoading: parentLoading, error: par
   }
 
   if (error) {
+    // Check if error is about mock data
+    const isMockDataError = error.includes('mock data');
+    
     return (
-      <div className="bg-red-50 p-4 rounded-lg text-red-800">
-        <h2 className="text-xl font-bold">Error Loading Data</h2>
+      <div className={isMockDataError ? "bg-yellow-50 p-4 rounded-lg text-yellow-800" : "bg-red-50 p-4 rounded-lg text-red-800"}>
+        <h2 className="text-xl font-bold">{isMockDataError ? "Using Mock Data" : "Error Loading Data"}</h2>
         <p>{error}</p>
-        <p className="mt-2 font-semibold">No mock data is being displayed. Please fix the connection issues to see real data.</p>
+        {isMockDataError ? (
+          <p className="mt-2 font-semibold">Mock data is being displayed because real data couldn't be loaded. The app will automatically use real data when it becomes available.</p>
+        ) : (
+          <p className="mt-2 font-semibold">No mock data is being displayed. Please fix the connection issues to see real data.</p>
+        )}
       </div>
     );
   }

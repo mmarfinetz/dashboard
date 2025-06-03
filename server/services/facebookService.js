@@ -14,7 +14,8 @@ export async function fetchFacebookAdsData(startDate, endDate, forceRefresh = fa
     // Check if we should use mock data
     if (process.env.USE_MOCK_DATA === 'true') {
       console.log('Using mock Facebook Ads data');
-      return generateMockFacebookAdsData(startDate, endDate);
+      const mockData = generateMockFacebookAdsData(startDate, endDate);
+      return { ...mockData, mock: true }; // Add a flag to indicate this is mock data
     }
     
     const adAccountId = process.env.FACEBOOK_AD_ACCOUNT_ID;
@@ -128,12 +129,17 @@ export async function fetchFacebookAdsData(startDate, endDate, forceRefresh = fa
   } catch (error) {
     console.error('Error fetching Facebook Ads data:', error.response ? error.response.data : error.message);
     
-    // Do not use mock data fallback at all
-    console.error('Facebook Ads data fetch failed and mock data is disabled');
-    // Propagate the error to show real error messages
-    
-    // Otherwise, propagate the error
-    throw new Error(`Failed to fetch Facebook Ads data: ${error.message}`);
+    // Check if mock data fallback is enabled
+    if (process.env.USE_MOCK_DATA_FALLBACK === 'true') {
+      console.warn('Falling back to mock Facebook Ads data due to error');
+      const mockData = generateMockFacebookAdsData(startDate, endDate);
+      return { ...mockData, mock: true }; // Add a flag to indicate this is mock data
+    } else {
+      // Otherwise, do not use mock data fallback at all
+      console.error('Facebook Ads data fetch failed and mock data is disabled');
+      // Propagate the error to show real error messages
+      throw new Error(`Failed to fetch Facebook Ads data: ${error.message}`);
+    }
   }
 }
 
@@ -151,7 +157,8 @@ export async function fetchFacebookPageData(pageId, startDate, endDate, forceRef
     // Check if we should use mock data
     if (process.env.USE_MOCK_DATA === 'true') {
       console.log('Using mock Facebook Page data');
-      return generateMockFacebookPageData(startDate, endDate);
+      const mockData = generateMockFacebookPageData(startDate, endDate);
+      return { ...mockData, mock: true }; // Add a flag to indicate this is mock data
     }
     
     const accessToken = process.env.FACEBOOK_ACCESS_TOKEN;
@@ -250,12 +257,17 @@ export async function fetchFacebookPageData(pageId, startDate, endDate, forceRef
   } catch (error) {
     console.error('Error fetching Facebook Page data:', error.response ? error.response.data : error.message);
     
-    // Do not use mock data fallback at all
-    console.error('Facebook Page data fetch failed and mock data is disabled');
-    // Propagate the error to show real error messages
-    
-    // Otherwise, propagate the error
-    throw new Error(`Failed to fetch Facebook Page data: ${error.message}`);
+    // Check if mock data fallback is enabled
+    if (process.env.USE_MOCK_DATA_FALLBACK === 'true') {
+      console.warn('Falling back to mock Facebook Page data due to error');
+      const mockData = generateMockFacebookPageData(startDate, endDate);
+      return { ...mockData, mock: true }; // Add a flag to indicate this is mock data
+    } else {
+      // Otherwise, do not use mock data fallback at all
+      console.error('Facebook Page data fetch failed and mock data is disabled');
+      // Propagate the error to show real error messages
+      throw new Error(`Failed to fetch Facebook Page data: ${error.message}`);
+    }
   }
 }
 
