@@ -1,0 +1,28 @@
+{
+  "version": "1.0.0",
+  "debug": {
+    "enabled": true,
+    "verbose": false,
+    "logApiRequests": true,
+    "logApiResponses": false
+  },
+  "apis": {
+    "productionBaseUrl": "https://perfect-light-production.up.railway.app",
+    "developmentBaseUrl": "http://localhost:3001",
+    "mockDataEnabled": false,
+    "mockDataFallbackEnabled": true
+  },
+  "credentials": {
+    "checkOnStartup": true,
+    "autoRefreshTokens": false
+  },
+  "ui": {
+    "showDebugPanel": false,
+    "logNetworkActivity": true,
+    "logStateChanges": false
+  },
+  "deployment": {
+    "frontendUrl": "https://marketing-insights-dashboard-for-plumbing-company.vercel.app",
+    "backendUrl": "https://perfect-light-production.up.railway.app"
+  }
+}
