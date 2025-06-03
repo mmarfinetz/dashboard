@@ -1,13 +1,31 @@
 import React, { useState, useEffect } from 'react';
 import { LineChart, Line, BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer, PieChart, Pie, Cell, AreaChart, Area, ComposedChart, Scatter } from 'recharts';
 
-const FacebookDashboard = () => {
+// Helper function to determine the appropriate API base URL based on the environment
+const getApiBaseUrl = () => {
+  // For now, always use the local server since Railway is down
+  return 'http://localhost:3001';
+  
+  // Once Railway is fixed, use this code:
+  /*
+  const isProduction = window.location.hostname !== 'localhost';
+  if (isProduction) {
+    return 'https://perfect-light-production.up.railway.app';
+  } else {
+    return 'http://localhost:3001';
+  }
+  */
+};
+
+const FacebookDashboard = ({ preloadedData, isLoading: parentLoading, error: parentError }) => {
   const [fbData, setFbData] = useState([]);
-  const [isLoading, setIsLoading] = useState(true);
-  const [error, setError] = useState(null);
+  const [isLoading, setIsLoading] = useState(parentLoading !== undefined ? parentLoading : true);
+  const [error, setError] = useState(parentError || null);
   const [timeframe, setTimeframe] = useState('all');
   const [activeMetric, setActiveMetric] = useState('reach');
   const [audienceView, setAudienceView] = useState('demographic');
+  const [followerCount, setFollowerCount] = useState(0);
+  const [followerError, setFollowerError] = useState(null);
   const [summary, setSummary] = useState({
     totalEngagements: 0,
     totalNegativeFeedback: 0,
@@ -59,41 +77,42 @@ const FacebookDashboard = () => {
     ]
   };
 
-  // Fetch data from the API
+  // Fetch real follower count separately
+  const fetchRealFollowerCount = async () => {
+    try {
+      // Get the appropriate base URL depending on the environment
+      const apiBase = getApiBaseUrl();
+      const apiUrl = `${apiBase}/api/facebook-page-followers`;
+      
+      console.log(`Fetching real Facebook follower count from: ${apiUrl}`);
+      const response = await fetch(apiUrl);
+      
+      if (!response.ok) {
+        throw new Error(`Failed to fetch follower count: ${response.statusText}`);
+      }
+      
+      const data = await response.json();
+      console.log('Follower count response:', data);
+      
+      // Update the follower count state with real data
+      setFollowerCount(data.followers);
+      setFollowerError(null);
+    } catch (err) {
+      console.error('Error fetching follower count:', err);
+      setFollowerError(err.message);
+      setFollowerCount(0); // Reset to 0 if error
+    }
+  };
+
+  // Use preloaded data if available or fetch data
   useEffect(() => {
-    const fetchFacebookData = async () => {
+    // Always fetch the real follower count
+    fetchRealFollowerCount();
+    
+    if (preloadedData) {
+      // Process the preloaded data
       try {
-        setIsLoading(true);
-        
-        // Calculate a reasonable date range based on current date
-        const endDate = new Date();
-        const startDate = new Date();
-        // Go back 90 days for data
-        startDate.setDate(endDate.getDate() - 90);
-        
-        const formattedStartDate = startDate.toISOString().split('T')[0];
-        const formattedEndDate = endDate.toISOString().split('T')[0];
-        
-        // Fetch data from our API
-        const apiUrl = `http://localhost:3001/api/facebook-ads-data?startDate=${formattedStartDate}&endDate=${formattedEndDate}`;
-        
-        const response = await fetch(apiUrl);
-        
-        if (!response.ok) {
-          throw new Error(`Failed to fetch Facebook data: ${response.statusText}`);
-        }
-        
-        // Process the data or fall back to sample data if needed
-        let processedData;
-        try {
-          const responseData = await response.json();
-          // Transform API data to match our expected format
-          processedData = transformApiData(responseData);
-        } catch (dataError) {
-          console.warn('Error processing API data, falling back to sample data:', dataError);
-          processedData = generateSampleData();
-        }
-        
+        const processedData = transformApiData(preloadedData);
         setFbData(processedData);
         
         // Calculate summary metrics
@@ -107,49 +126,141 @@ const FacebookDashboard = () => {
           negativeFeedbackRate: totalEngagements > 0 ? 
             (totalNegativeFeedback / totalEngagements * 100).toFixed(2) : "0.00"
         });
-        
-        setIsLoading(false);
-      } catch (err) {
-        console.error('Error fetching Facebook data:', err);
-        setError(err.message);
-        setIsLoading(false);
-        
-        // Fallback to sample data if API fails
-        const sampleData = generateSampleData();
-        setFbData(sampleData);
-        
-        // Calculate summary metrics for sample data
-        const totalEngagements = sampleData.reduce((sum, item) => sum + item.engagements, 0);
-        const totalNegativeFeedback = sampleData.reduce((sum, item) => sum + item.negativeFeedback, 0);
-        
-        setSummary({
-          totalEngagements,
-          totalNegativeFeedback,
-          engagementRate: ((totalEngagements / sampleData.length) / 30).toFixed(2),
-          negativeFeedbackRate: (totalNegativeFeedback / totalEngagements * 100).toFixed(2)
-        });
+      } catch (dataError) {
+        console.error('Error processing preloaded API data:', dataError);
+        // Display error instead of using sample data
+        handleFetchError(`Failed to process preloaded Facebook data: ${dataError.message}`);
       }
-    };
+    } else {
+      // No preloaded data, fetch it directly
+      fetchFacebookData();
+    }
+  }, [preloadedData]);
+
+  // Handle parent loading state changes
+  useEffect(() => {
+    if (parentLoading !== undefined) {
+      setIsLoading(parentLoading);
+    }
+  }, [parentLoading]);
+
+  // Handle parent error changes
+  useEffect(() => {
+    if (parentError !== undefined) {
+      setError(parentError);
+    }
+  }, [parentError]);
+
+  // Fetch data from the API (only if no preloaded data)
+  const fetchFacebookData = async () => {
+    try {
+      setIsLoading(true);
+      
+      // Calculate a reasonable date range based on current date
+      const endDate = new Date();
+      const startDate = new Date();
+      // Go back 90 days for data
+      startDate.setDate(endDate.getDate() - 90);
+      
+      const formattedStartDate = startDate.toISOString().split('T')[0];
+      const formattedEndDate = endDate.toISOString().split('T')[0];
+      
+      // Get the appropriate base URL depending on the environment
+      const apiBase = getApiBaseUrl();
+      
+      // Fetch data from our API
+      const apiUrl = `${apiBase}/api/facebook-ads-data?startDate=${formattedStartDate}&endDate=${formattedEndDate}`;
+      
+      console.log(`Fetching Facebook Ads data from: ${apiUrl}`);
+      const response = await fetch(apiUrl);
+      
+      if (!response.ok) {
+        throw new Error(`Failed to fetch Facebook data: ${response.statusText}`);
+      }
+      
+      // Process the data or fall back to sample data if needed
+      let processedData;
+      try {
+        const responseData = await response.json();
+        // Transform API data to match our expected format
+        processedData = transformApiData(responseData);
+      } catch (dataError) {
+        console.error('Error processing API data:', dataError);
+        // Don't use sample data, throw the error to be handled by the error handler
+        throw new Error(`Failed to process Facebook data: ${dataError.message}`);
+      }
+      
+      setFbData(processedData);
+      
+      // Calculate summary metrics
+      const totalEngagements = processedData.reduce((sum, item) => sum + item.engagements, 0);
+      const totalNegativeFeedback = processedData.reduce((sum, item) => sum + (item.negativeFeedback || 0), 0);
+      
+      setSummary({
+        totalEngagements,
+        totalNegativeFeedback,
+        engagementRate: ((totalEngagements / processedData.length) / 30).toFixed(2), // daily avg per post
+        negativeFeedbackRate: totalEngagements > 0 ? 
+          (totalNegativeFeedback / totalEngagements * 100).toFixed(2) : "0.00"
+      });
+      
+      setIsLoading(false);
+    } catch (err) {
+      console.error('Error fetching Facebook data:', err);
+      setError(err.message);
+      setIsLoading(false);
+      
+      // Display error instead of using sample data
+      handleFetchError(err.message);
+    }
+  };
+  
+  // Display error when data fetch fails
+  const handleFetchError = (errorMessage) => {
+    // Clear any previous data
+    setFbData([]);
     
-    fetchFacebookData();
-  }, []);
+    // Set error state to display error message
+    setError(errorMessage || 'Failed to fetch Facebook data. No sample data will be used.');
+    
+    // Reset loading state
+    setIsLoading(false);
+  };
   
   // Transform API data to match our expected format
   const transformApiData = (apiData) => {
     // If the API data doesn't have the fields we need, we need to transform it
     console.log('API data for transform:', apiData[0]); // Log the first item for debugging
+    
+    // Verify that we have real data, not mock data
+    if (!apiData || apiData.length === 0) {
+      throw new Error('No data received from Facebook API');
+    }
+
+    // Check if any required fields are missing
+    const requiredFields = ['Date', 'date_start', 'date'];
+    const hasRequiredFields = requiredFields.some(field => apiData[0] && (apiData[0][field] !== undefined));
+    
+    if (!hasRequiredFields) {
+      throw new Error('Facebook data is missing required fields');
+    }
+
     return apiData.map(item => {
       const date = new Date(item.Date || item.date_start || item.date);
       
-      // Extract metrics or provide defaults
-      const engagement = item.engagement || Math.floor(Math.random() * 50) + 20;
-      const reach = item.reach || parseInt(item.Impressions?.replace(/,/g, '')) || Math.floor(Math.random() * 1000) + 500;
+      // Extract only real metrics - no defaults or random generation
+      const engagement = item.engagement || (item.page_engaged_users || 0);
+      const reach = item.reach || parseInt(item.Impressions?.replace(/,/g, '')) || parseInt(item.page_impressions) || 0;
       
       // Extract campaign name if available
       const campaignName = item.campaign_name || "Default Campaign";
       
-      // Process views for summary calculations
-      const views = item.page_views_total || Math.floor(reach * 0.4);
+      // Use only real data for views
+      const views = item.page_views_total || 0;
+      
+      // Only track new follows per day, not total follower count
+      // Since the page_fans field is the total count, not daily new follows
+      const newFollows = item.page_fan_adds || 0;
       
       return {
         date: date.toLocaleDateString(),
@@ -158,15 +269,15 @@ const FacebookDashboard = () => {
         week: Math.ceil((date.getDate() / 7)),
         campaignName: campaignName,
         reach: reach,
-        impressions: parseInt(item.Impressions?.replace(/,/g, '')) || parseInt(item.impressions) || reach * 1.5,
+        impressions: parseInt(item.Impressions?.replace(/,/g, '')) || parseInt(item.impressions) || parseInt(item.page_impressions) || 0,
         interactions: engagement,
-        linkClicks: item.Clicks ? parseInt(item.Clicks) : parseInt(item.clicks) || Math.floor(engagement * 0.4),
-        follows: Math.floor((item.Clicks ? parseInt(item.Clicks) : engagement * 0.4) * 0.1),
-        visits: item.page_views_total || Math.floor((item.Clicks ? parseInt(item.Clicks) : engagement * 0.4) * 0.8),
-        engagementRate: ((engagement / reach) * 100).toFixed(2),
+        linkClicks: item.Clicks ? parseInt(item.Clicks) : parseInt(item.clicks) || 0,
+        newFollows: newFollows,
+        visits: item.page_views_total || 0,
+        engagementRate: reach > 0 ? ((engagement / reach) * 100).toFixed(2) : "0.00",
         engagements: engagement,
         views: views,
-        negativeFeedback: Math.floor(Math.random() * 3)
+        negativeFeedback: item.negative_feedback || 0
       };
     });
   };
@@ -230,12 +341,12 @@ const FacebookDashboard = () => {
     const totalViews = data.reduce((sum, day) => sum + day.views, 0);
     const totalInteractions = data.reduce((sum, day) => sum + day.interactions, 0);
     const totalLinkClicks = data.reduce((sum, day) => sum + day.linkClicks, 0);
-    const totalFollows = data.reduce((sum, day) => sum + day.follows, 0);
+    const totalNewFollows = data.reduce((sum, day) => sum + (day.newFollows || 0), 0);
     const totalVisits = data.reduce((sum, day) => sum + day.visits, 0);
     
-    const avgEngagementRate = (totalInteractions / totalReach * 100).toFixed(2);
-    const avgClickThroughRate = (totalLinkClicks / totalImpressions * 100).toFixed(2);
-    const conversionRate = (totalFollows / totalLinkClicks * 100).toFixed(2);
+    const avgEngagementRate = totalReach > 0 ? (totalInteractions / totalReach * 100).toFixed(2) : "0.00";
+    const avgClickThroughRate = totalImpressions > 0 ? (totalLinkClicks / totalImpressions * 100).toFixed(2) : "0.00";
+    const conversionRate = totalLinkClicks > 0 ? (totalNewFollows / totalLinkClicks * 100).toFixed(2) : "0.00";
     
     return {
       totalReach,
@@ -243,7 +354,7 @@ const FacebookDashboard = () => {
       totalViews,
       totalInteractions,
       totalLinkClicks,
-      totalFollows,
+      totalNewFollows,
       totalVisits,
       avgEngagementRate,
       avgClickThroughRate,
@@ -392,12 +503,23 @@ const FacebookDashboard = () => {
       <div className="bg-red-50 p-4 rounded-lg text-red-800">
         <h2 className="text-xl font-bold">Error Loading Data</h2>
         <p>{error}</p>
+        <p className="mt-2 font-semibold">No mock data is being displayed. Please fix the connection issues to see real data.</p>
       </div>
     );
   }
+  
+  // Show warning if follower count error occurred but other data loaded
+  const hasFollowerError = followerError && !error;
 
   return (
     <div className="bg-gray-100 p-6 rounded-lg">
+      {hasFollowerError && (
+        <div className="bg-yellow-50 p-3 rounded-lg mb-4 text-yellow-800 border border-yellow-300">
+          <p className="font-semibold">Warning: Could not load real-time follower count</p>
+          <p className="text-xs">{followerError}</p>
+        </div>
+      )}
+      
       <div className="mb-8">
         <h1 className="text-2xl font-bold text-gray-800 mb-4">MMW Contracting - Facebook Analytics Dashboard</h1>
         
@@ -423,8 +545,12 @@ const FacebookDashboard = () => {
           
           <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
             <div className="bg-red-50 p-4 rounded-lg">
-              <h3 className="text-sm text-gray-500">New Follows</h3>
-              <p className="text-2xl font-bold text-red-600">{filteredSummary.totalFollows.toLocaleString()}</p>
+              <h3 className="text-sm text-gray-500">Total Followers</h3>
+              {followerError ? (
+                <div className="text-xs text-red-500">Error: {followerError}</div>
+              ) : (
+                <p className="text-2xl font-bold text-red-600">{followerCount.toLocaleString()}</p>
+              )}
             </div>
             <div className="bg-indigo-50 p-4 rounded-lg">
               <h3 className="text-sm text-gray-500">Engagement Rate</h3>

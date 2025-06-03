@@ -1,4 +1,77 @@
-# Troubleshooting Guide
+# Troubleshooting Guide for Marketing Insights Dashboard
+
+## Testing and Debug Tools (Updated June 2025)
+
+We've consolidated all testing and debugging tools into a centralized test suite:
+
+### Running Tests
+
+```bash
+# Run the interactive test menu
+npm test
+
+# Run all tests
+npm run test:all
+
+# Run specific tests
+npm run test:dashboard    # Run dashboard diagnostics
+npm run test:railway      # Test Railway API connection
+npm run test:local        # Test local API connection
+npm run test:facebook     # Check Facebook credentials
+npm run test:google       # Check Google Ads credentials
+```
+
+The test suite includes tools for:
+- API server connectivity checks
+- Credential validation
+- Identifying and fixing hardcoded localhost URLs
+- Verifying environment variables
+- Testing all API endpoints
+
+### Fixing Production Deployment Issues
+
+If the dashboard is not displaying live data on Vercel:
+
+1. **Run the dashboard test**:
+   ```bash
+   npm run test:dashboard
+   ```
+   This will identify and fix common issues like hardcoded URLs that don't work in production.
+
+2. **Check server logs**: Review Vercel logs for any API connection errors
+
+3. **Verify API deployment**: Ensure your backend API is properly deployed and accessible from your frontend
+
+4. **CORS settings**: Check that your API server allows requests from your deployed frontend domain
+
+## Quickstart
+
+If you're experiencing issues with the dashboard, follow these steps first:
+
+1. **Check API credentials**
+   ```
+   # Run all tests 
+   npm run test:all
+   
+   # Or check specific services
+   npm run test:facebook
+   npm run test:google
+   ```
+
+2. **Clear the API cache**
+   ```
+   # Clear all cached API responses
+   npm run clear-cache
+   ```
+
+3. **Check API status**
+   ```
+   # Check API server status and configuration
+   curl http://localhost:3001/api/status
+   ```
+
+4. **Use the dashboard refresh button**
+   The dashboard includes a refresh button to fetch fresh data without clearing the entire cache.
 
 ## Google Ads API Authentication Issues
 
@@ -14,7 +87,7 @@ Follow these steps to troubleshoot and fix the issue:
 Use our diagnostic tool to verify your Google Ads credentials:
 
 ```bash
-node server/utils/credentialsDiagnostic.js
+npm run test:google
 ```
 
 This will test your credentials and provide specific guidance on what might be wrong.
@@ -81,28 +154,96 @@ If you need to continue development while resolving API issues:
 
 ## Facebook API Authentication Issues
 
-If Facebook API calls are failing but returning empty arrays, this typically indicates:
+### Run the Facebook Diagnostic Tool
 
-1. **Valid credentials**: Your access token is valid, but:
-   - There may be no data for the requested date range
-   - The account may not have active ads
-   - The token may not have sufficient permissions
+Our diagnostic tool can identify most Facebook API issues:
 
-2. **Check your Facebook credentials**:
+```bash
+npm run test:facebook
+```
+
+This will test your credentials and help diagnose common issues.
+
+### Common Facebook API Issues
+
+If Facebook API calls are failing or returning only old data (e.g., data from March 31 and April 1):
+
+1. **Access Token Expiration**:
+   - Facebook tokens expire - you may need to generate a new one
+   - The diagnostic tool will tell you if your token has expired
+
+2. **Permission Scopes**:
+   - Your token needs `ads_read` and possibly `pages_read_engagement` permissions
+   - Insufficient permissions may result in limited/old data
+
+3. **Campaign ID Filter**:
+   - By default, we now filter for campaign ID: 23846212577230793
+   - If this campaign doesn't exist or isn't accessible, you'll get limited data
+
+4. **Ad Account Status**:
+   - If your ad account is paused or restricted, you may see only historical data
+
+5. **Check your Facebook credentials**:
    ```
    FACEBOOK_ACCESS_TOKEN=your-access-token
    FACEBOOK_AD_ACCOUNT_ID=act_1234567890
    FACEBOOK_PAGE_ID=your-page-id
    ```
 
-3. **Verify token permissions**:
-   - Your access token should have `ads_read` permissions
-   - For longer-term usage, consider using a long-lived token
+6. **Generate a new Long-Lived Token**:
+   - Facebook access tokens typically expire after 60 days
+   - Generate a new long-lived token through the Facebook Developer Console
+
+## Dashboard Loading Issues
+
+If the dashboard isn't loading data properly or seems stuck:
+
+1. **Check API Status**
+   ```
+   curl http://localhost:3001/api/status
+   ```
+
+2. **Review Server Logs**
+   Look for errors in the server console, especially when data loading fails
+
+3. **Verify Async Loading**
+   - Both Google Ads and Facebook data should load in parallel
+   - If one platform fails, the other should still be accessible
+
+4. **Browser Console**
+   - Check browser console for network requests and errors
+   - Verify that both API endpoints are being called
+
+5. **Try Refresh Button**
+   - Use the refresh button in the dashboard to fetch fresh data
+   - This bypasses the cache and makes new API requests
+
+## API Caching Issues
+
+If data seems stale or outdated:
+
+1. **Clear the Cache**
+   ```
+   npm run clear-cache
+   ```
+
+2. **Force Refresh for Specific Request**
+   Add the `forceRefresh=true` parameter to API requests:
+   ```
+   curl "http://localhost:3001/api/facebook-ads-data?startDate=2025-03-01&endDate=2025-05-31&forceRefresh=true"
+   ```
+
+3. **Check Cache Statistics**
+   ```
+   curl http://localhost:3001/api/status
+   ```
+   Look at the `cache` section to see how many entries are stored and their age
 
 ## Need Further Assistance?
 
 If you continue to experience issues after following these steps, please:
 
 1. Check the server logs for additional error details
-2. Review the [Google Ads API documentation](https://developers.google.com/google-ads/api/docs/first-call/overview)
-3. Ensure your Google Ads developer token has the appropriate access level 
+2. Review the [Google Ads API documentation](https://developers.google.com/google-ads/api/docs/first-call/overview) or [Facebook Marketing API documentation](https://developers.facebook.com/docs/marketing-api/)
+3. Run our diagnostic tools to verify your credentials
+4. Ensure both API services have the appropriate access level and permissions

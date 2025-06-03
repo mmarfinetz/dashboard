@@ -4,13 +4,16 @@ A React-based dashboard application that provides detailed analytics and insight
 
 ## Features
 
-- Real-time data fetching from Google Ads API and Facebook Marketing API
+- Parallel data loading from Google Ads and Facebook Marketing APIs
 - Comprehensive metrics tracking including clicks, impressions, costs, CTR, CPC, and CPM
 - Dynamic filtering by date ranges (7 days, 30 days, all-time)
 - Responsive charts and visualizations using Recharts
 - Performance insights with top-performing days and cost efficiency metrics
 - Audience demographics analysis for Facebook campaigns
 - Mobile-responsive design with Tailwind CSS
+- API response caching with auto-expiry
+- Automatic retry logic for API failures
+- Campaign-specific data filtering
 
 ## Technical Architecture
 
@@ -28,7 +31,37 @@ The application consists of:
 - Node.js 14.x or higher
 - npm or yarn
 - Google Ads API credentials
-- Facebook Marketing API credentials
+- Facebook Marketing API credentials with `ads_read` permissions
+- Campaign ID for Facebook Ads data access
+
+### Live Data Configuration
+
+For the dashboard to work with live data in production:
+
+1. **Use the Railway-Deployed Backend API**
+   - The backend API is already deployed at: https://perfect-light-production.up.railway.app
+   - You can test the connection to this API by running:
+   ```bash
+   npm run test:railway
+   ```
+
+2. **Update API URLs to use Railway**
+   - The dashboard has been updated to automatically use the Railway backend in production
+   - To manually fix URLs if needed, run:
+   ```bash
+   npm run test:dashboard
+   ```
+
+3. **Run Diagnostics**
+   - Test your API credentials and connections:
+   ```bash
+   npm run test:all
+   ```
+
+4. **Deploy the Frontend**
+   - Deploy the updated frontend code to Vercel
+   - The dashboard will automatically connect to the Railway API server
+   - Visit: https://marketing-insights-dashboard-for-plumbing-company.vercel.app/
 
 ### Installation
 
@@ -104,6 +137,7 @@ Configure your environment variables in a `.env` file:
 PORT=3001
 NODE_ENV=production
 USE_MOCK_DATA=false
+USE_MOCK_DATA_FALLBACK=true
 
 # Google Ads API credentials
 GOOGLE_ADS_CLIENT_ID=your_client_id
@@ -117,6 +151,30 @@ FACEBOOK_ACCESS_TOKEN=your_facebook_access_token
 FACEBOOK_AD_ACCOUNT_ID=your_ad_account_id
 FACEBOOK_PAGE_ID=your_page_id
 ```
+
+## Testing and Diagnostic Tools
+
+The application includes testing and diagnostic utilities for API connection verification:
+
+```bash
+# Run interactive test menu
+npm test
+
+# Run all tests
+npm run test:all
+
+# Test specific components
+npm run test:local       # Test local API connection
+npm run test:railway     # Test Railway API connection
+npm run test:facebook    # Test Facebook API credentials
+npm run test:google      # Test Google Ads API credentials
+npm run test:dashboard   # Run dashboard debug utilities
+
+# Clear API cache
+npm run clear-cache
+```
+
+See the [tests/README.md](tests/README.md) file for more information about the test suite.
 
 ## Contributing
 

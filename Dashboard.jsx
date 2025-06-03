@@ -2,11 +2,27 @@ import React, { useState, useEffect } from 'react';
 import { LineChart, Line, BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer, ComposedChart, Area } from 'recharts';
 import FacebookDashboard from './FacebookDashboard';
 
-const GoogleAdsDashboard = () => {
+// Helper function to determine the appropriate API base URL based on the environment
+const getApiBaseUrl = () => {
+  // For now, always use the local server since Railway is down
+  return 'http://localhost:3001';
+  
+  // Once Railway is fixed, use this code:
+  /*
+  const isProduction = window.location.hostname !== 'localhost';
+  if (isProduction) {
+    return 'https://perfect-light-production.up.railway.app';
+  } else {
+    return 'http://localhost:3001';
+  }
+  */
+};
+
+const GoogleAdsDashboard = ({ preloadedData, isLoading: parentLoading, error: parentError }) => {
   const [rawData, setRawData] = useState([]);
   const [data, setData] = useState([]);
-  const [isLoading, setIsLoading] = useState(true);
-  const [error, setError] = useState(null);
+  const [isLoading, setIsLoading] = useState(parentLoading !== undefined ? parentLoading : true);
+  const [error, setError] = useState(parentError || null);
   const [timeframe, setTimeframe] = useState('all');
   const [dataStats, setDataStats] = useState({
     totalClicks: 0,
@@ -41,53 +57,80 @@ const GoogleAdsDashboard = () => {
     return Math.ceil((pastDaysOfYear + firstDayOfYear.getDay() + 1) / 7);
   };
 
-  // Fetch data from the API
+  // Use preloaded data if available, otherwise fetch data
   useEffect(() => {
-    const fetchMarketingData = async () => {
-      try {
-        setIsLoading(true);
-        
-        // Calculate a reasonable date range based on current date
-        const endDate = new Date();
-        const startDate = new Date();
-        // Go back 90 days for data
-        startDate.setDate(endDate.getDate() - 90);
-        
-        const formattedStartDate = startDate.toISOString().split('T')[0];
-        const formattedEndDate = endDate.toISOString().split('T')[0];
-        
-        // Fetch data from our API
-        const apiUrl = `http://localhost:3001/api/google-ads-data?startDate=${formattedStartDate}&endDate=${formattedEndDate}`;
-        
-        const response = await fetch(apiUrl);
-        
-        if (!response.ok) {
-          throw new Error(`Failed to fetch marketing data: ${response.statusText}`);
-        }
-        
-        const fetchedRawData = await response.json();
-        setRawData(fetchedRawData);
-        
-        // Parse the raw data
-        const parsedData = parseData(fetchedRawData);
-        setData(parsedData);
-        
-        // Calculate summary stats
-        calculateDataStats(parsedData);
-        
-        setIsLoading(false);
-      } catch (err) {
-        console.error('Error fetching data:', err);
-        setError(err.message);
-        setIsLoading(false);
-        
-        // Fallback to sample data if API fails
-        useSampleData();
+    if (preloadedData) {
+      setRawData(preloadedData);
+      const parsedData = parseData(preloadedData);
+      setData(parsedData);
+      calculateDataStats(parsedData);
+      setIsLoading(false);
+    } else {
+      fetchMarketingData();
+    }
+  }, [preloadedData]);
+
+  // Handle parent loading state changes
+  useEffect(() => {
+    if (parentLoading !== undefined) {
+      setIsLoading(parentLoading);
+    }
+  }, [parentLoading]);
+
+  // Handle parent error changes
+  useEffect(() => {
+    if (parentError !== undefined) {
+      setError(parentError);
+    }
+  }, [parentError]);
+  
+  // Fetch data from the API (only if no preloaded data)
+  const fetchMarketingData = async () => {
+    try {
+      setIsLoading(true);
+      
+      // Calculate a reasonable date range based on current date
+      const endDate = new Date();
+      const startDate = new Date();
+      // Go back 90 days for data
+      startDate.setDate(endDate.getDate() - 90);
+      
+      const formattedStartDate = startDate.toISOString().split('T')[0];
+      const formattedEndDate = endDate.toISOString().split('T')[0];
+      
+      // Get the appropriate base URL depending on the environment
+      const apiBase = getApiBaseUrl();
+      
+      // Fetch data from our API
+      const apiUrl = `${apiBase}/api/google-ads-data?startDate=${formattedStartDate}&endDate=${formattedEndDate}`;
+      
+      console.log(`Fetching Google Ads data from: ${apiUrl}`);
+      const response = await fetch(apiUrl);
+      
+      if (!response.ok) {
+        throw new Error(`Failed to fetch marketing data: ${response.statusText}`);
       }
-    };
-    
-    fetchMarketingData();
-  }, []);
+      
+      const fetchedRawData = await response.json();
+      setRawData(fetchedRawData);
+      
+      // Parse the raw data
+      const parsedData = parseData(fetchedRawData);
+      setData(parsedData);
+      
+      // Calculate summary stats
+      calculateDataStats(parsedData);
+      
+      setIsLoading(false);
+    } catch (err) {
+      console.error('Error fetching data:', err);
+      setError(err.message);
+      setIsLoading(false);
+      
+      // Fallback to sample data if API fails
+      useSampleData();
+    }
+  };
   
   // Fallback to sample data if API call fails
   const useSampleData = () => {
@@ -380,38 +423,245 @@ const GoogleAdsDashboard = () => {
 
 const Dashboard = () => {
   const [activeTab, setActiveTab] = useState('facebook');
+  const [googleAdsData, setGoogleAdsData] = useState(null);
+  const [facebookAdsData, setFacebookAdsData] = useState(null);
+  const [loadingState, setLoadingState] = useState({
+    google: true,
+    facebook: true
+  });
+  const [dataError, setDataError] = useState({
+    google: null,
+    facebook: null
+  });
+  const [refreshing, setRefreshing] = useState(false);
+
+  // Function to fetch all data in parallel
+  const fetchAllPlatformData = async (forceRefresh = false) => {
+    if (forceRefresh) {
+      setRefreshing(true);
+    } else {
+      setLoadingState({
+        google: true,
+        facebook: true
+      });
+    }
+    
+    // Reset errors on refresh
+    setDataError({
+      google: null,
+      facebook: null
+    });
+    
+    // Calculate date range (90 days)
+    const endDate = new Date();
+    const startDate = new Date();
+    startDate.setDate(endDate.getDate() - 90);
+    
+    const formattedStartDate = startDate.toISOString().split('T')[0];
+    const formattedEndDate = endDate.toISOString().split('T')[0];
+    
+    // Fetch Google Ads and Facebook data in parallel
+    const fetchGoogleData = async () => {
+      try {
+        // Get the appropriate base URL depending on the environment
+        const apiBase = getApiBaseUrl();
+        
+        // Add forceRefresh parameter if requested
+        const refreshParam = forceRefresh ? '&forceRefresh=true' : '';
+        const apiUrl = `${apiBase}/api/google-ads-data?startDate=${formattedStartDate}&endDate=${formattedEndDate}${refreshParam}`;
+        
+        console.log(`Fetching Google Ads data from: ${apiUrl}`);
+        const response = await fetch(apiUrl);
+        
+        if (!response.ok) {
+          throw new Error(`Failed to fetch Google Ads data: ${response.statusText}`);
+        }
+        
+        const fetchedData = await response.json();
+        setGoogleAdsData(fetchedData);
+        setLoadingState(prev => ({...prev, google: false}));
+      } catch (err) {
+        console.error('Error fetching Google Ads data:', err);
+        setDataError(prev => ({...prev, google: err.message}));
+        setLoadingState(prev => ({...prev, google: false}));
+        
+        // Fallback to sample data if not just refreshing
+        if (!forceRefresh) {
+          useSampleGoogleData();
+        }
+      }
+    };
+    
+    const fetchFacebookData = async () => {
+      try {
+        // Get the appropriate base URL depending on the environment
+        const apiBase = getApiBaseUrl();
+        
+        // Add forceRefresh parameter if requested
+        const refreshParam = forceRefresh ? '&forceRefresh=true' : '';
+        const apiUrl = `${apiBase}/api/facebook-ads-data?startDate=${formattedStartDate}&endDate=${formattedEndDate}${refreshParam}`;
+        
+        console.log(`Fetching Facebook Ads data from: ${apiUrl}`);
+        const response = await fetch(apiUrl);
+        
+        if (!response.ok) {
+          throw new Error(`Failed to fetch Facebook data: ${response.statusText}`);
+        }
+        
+        const fetchedData = await response.json();
+        setFacebookAdsData(fetchedData);
+        setLoadingState(prev => ({...prev, facebook: false}));
+      } catch (err) {
+        console.error('Error fetching Facebook data:', err);
+        setDataError(prev => ({...prev, facebook: err.message}));
+        setLoadingState(prev => ({...prev, facebook: false}));
+        
+        // Fallback to sample data if not just refreshing
+        if (!forceRefresh) {
+          useSampleFacebookData();
+        }
+      }
+    };
+    
+    // Execute both fetch operations simultaneously
+    await Promise.all([
+      fetchGoogleData(),
+      fetchFacebookData()
+    ]);
+    
+    if (forceRefresh) {
+      setRefreshing(false);
+    }
+  };
+  
+  // Function to manually refresh data
+  const refreshData = () => {
+    fetchAllPlatformData(true);
+  };
+  
+  // Fetch data when component mounts
+  useEffect(() => {
+    fetchAllPlatformData();
+  }, []);
+  
+  // Sample data fallback functions
+  const useSampleGoogleData = () => {
+    // A few rows of sample data for fallback
+    const sampleRawData = [
+      { Date: 'Mon, Apr 8, 2025', Clicks: '45', Impressions: '3,158', Avg_CPC: '$0.42', Cost: '$18.84' },
+      { Date: 'Tue, Apr 9, 2025', Clicks: '51', Impressions: '4,358', Avg_CPC: '$0.32', Cost: '$16.37' },
+      { Date: 'Wed, Apr 10, 2025', Clicks: '45', Impressions: '2,714', Avg_CPC: '$0.28', Cost: '$12.47' },
+      { Date: 'Thu, Apr 11, 2025', Clicks: '39', Impressions: '3,205', Avg_CPC: '$0.42', Cost: '$16.49' },
+      { Date: 'Fri, Apr 12, 2025', Clicks: '61', Impressions: '3,883', Avg_CPC: '$0.29', Cost: '$17.48' },
+      { Date: 'Sat, Apr 13, 2025', Clicks: '30', Impressions: '4,310', Avg_CPC: '$0.32', Cost: '$9.63' },
+      { Date: 'Sun, Apr 14, 2025', Clicks: '25', Impressions: '3,401', Avg_CPC: '$0.53', Cost: '$13.19' }
+    ];
+    
+    setGoogleAdsData(sampleRawData);
+  };
+  
+  const useSampleFacebookData = () => {
+    // Generate sample Facebook data
+    const startDate = new Date(2025, 4, 24); // May 24, 2025 (recent data)
+    const endDate = new Date(2025, 4, 31);   // May 31, 2025 (today)
+    
+    const sampleData = [];
+    for (let d = new Date(startDate); d <= endDate; d.setDate(d.getDate() + 1)) {
+      const formattedDate = d.toLocaleDateString('en-US', { 
+        weekday: 'short', 
+        month: 'short', 
+        day: 'numeric', 
+        year: 'numeric' 
+      });
+      
+      const impressions = Math.floor(Math.random() * 5000) + 1000;
+      const clicks = Math.floor(impressions * (Math.random() * 0.05 + 0.01));
+      const cpc = (Math.random() * 0.5 + 0.8).toFixed(2);
+      const spend = (clicks * parseFloat(cpc)).toFixed(2);
+      
+      sampleData.push({
+        Date: formattedDate,
+        date_start: d.toISOString().split('T')[0],
+        date_stop: d.toISOString().split('T')[0],
+        campaign_name: "Marfinetz Plumbing Campaign",
+        Clicks: clicks.toString(),
+        clicks: clicks,
+        Impressions: impressions.toLocaleString(),
+        impressions: impressions,
+        Avg_CPC: `$${cpc}`,
+        cpc: parseFloat(cpc),
+        Cost: `$${spend}`,
+        spend: parseFloat(spend),
+        engagement: Math.round(clicks * 1.8)
+      });
+    }
+    
+    setFacebookAdsData(sampleData);
+  };
 
   return (
     <div className="min-h-screen bg-gray-50 p-4">
       <div className="max-w-7xl mx-auto">
         <div className="bg-white shadow-sm mb-6">
           <div className="border-b border-gray-200">
-            <nav className="-mb-px flex" aria-label="Tabs">
+            <div className="flex justify-between items-center">
+              <nav className="-mb-px flex flex-1" aria-label="Tabs">
+                <button
+                  onClick={() => setActiveTab('google')}
+                  className={`w-1/2 py-4 px-1 text-center border-b-2 font-medium text-sm ${
+                    activeTab === 'google'
+                      ? 'border-blue-500 text-blue-600'
+                      : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'
+                  }`}
+                >
+                  Google Ads Analytics
+                  {loadingState.google && <span className="ml-2 inline-block w-3 h-3 bg-blue-500 rounded-full animate-pulse"></span>}
+                </button>
+                <button
+                  onClick={() => setActiveTab('facebook')}
+                  className={`w-1/2 py-4 px-1 text-center border-b-2 font-medium text-sm ${
+                    activeTab === 'facebook'
+                      ? 'border-blue-500 text-blue-600'
+                      : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'
+                  }`}
+                >
+                  Facebook Analytics
+                  {loadingState.facebook && <span className="ml-2 inline-block w-3 h-3 bg-blue-500 rounded-full animate-pulse"></span>}
+                </button>
+              </nav>
+              
+              {/* Refresh button */}
               <button
-                onClick={() => setActiveTab('google')}
-                className={`w-1/2 py-4 px-1 text-center border-b-2 font-medium text-sm ${
-                  activeTab === 'google'
-                    ? 'border-blue-500 text-blue-600'
-                    : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'
+                onClick={refreshData}
+                disabled={refreshing}
+                className={`px-3 py-1 rounded-full flex items-center mr-4 ${
+                  refreshing 
+                    ? 'bg-gray-200 text-gray-500 cursor-not-allowed' 
+                    : 'bg-blue-100 text-blue-700 hover:bg-blue-200'
                 }`}
+                title="Refresh data from APIs"
               >
-                Google Ads Analytics
+                <svg xmlns="http://www.w3.org/2000/svg" className={`h-4 w-4 mr-1 ${refreshing ? 'animate-spin' : ''}`} fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
+                </svg>
+                {refreshing ? 'Refreshing...' : 'Refresh'}
               </button>
-              <button
-                onClick={() => setActiveTab('facebook')}
-                className={`w-1/2 py-4 px-1 text-center border-b-2 font-medium text-sm ${
-                  activeTab === 'facebook'
-                    ? 'border-blue-500 text-blue-600'
-                    : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'
-                }`}
-              >
-                Facebook Analytics
-              </button>
-            </nav>
+            </div>
           </div>
         </div>
 
-        {activeTab === 'google' ? <GoogleAdsDashboard /> : <FacebookDashboard />}
+        {activeTab === 'google' ? 
+          <GoogleAdsDashboard 
+            preloadedData={googleAdsData} 
+            isLoading={loadingState.google} 
+            error={dataError.google}
+          /> : 
+          <FacebookDashboard 
+            preloadedData={facebookAdsData} 
+            isLoading={loadingState.facebook} 
+            error={dataError.facebook}
+          />
+        }
       </div>
     </div>
   );
