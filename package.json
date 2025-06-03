@@ -4,12 +4,22 @@
   "version": "0.1.0",
   "type": "module",
   "scripts": {
+    "start": "cd server && npm install && npm start",
     "dev": "vite",
     "build": "vite build",
     "lint": "eslint . --ext js,jsx --report-unused-disable-directives --max-warnings 0",
     "preview": "vite preview",
     "server": "node server/server.js",
-    "dev:all": "concurrently \"npm run dev\" \"npm run server\""
+    "dev:all": "concurrently \"npm run dev\" \"npm run server\"",
+    "clear-cache": "curl http://localhost:3001/api/status?clearCache=true",
+    "test": "node tests/run-tests.js",
+    "test:interactive": "node tests/run-tests.js interactive",
+    "test:all": "node tests/run-tests.js all",
+    "test:local": "node tests/run-tests.js local",
+    "test:railway": "node tests/run-tests.js railway",
+    "test:facebook": "node tests/run-tests.js facebook",
+    "test:google": "node tests/run-tests.js google",
+    "test:dashboard": "node tests/run-tests.js dashboard"
   },
   "dependencies": {
     "axios": "^1.9.0",
@@ -17,6 +27,7 @@
     "dotenv": "^16.5.0",
     "express": "^4.21.2",
     "google-ads-api": "^14.2.0",
+    "node-fetch": "^3.3.2",
     "react": "^18.2.0",
     "react-dom": "^18.2.0",
     "recharts": "^2.10.3"

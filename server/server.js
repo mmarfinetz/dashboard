@@ -4,6 +4,7 @@ import dotenv from 'dotenv';
 import { fetchGoogleAdsData } from './services/googleAdsService.js';
 import { fetchFacebookAdsData, fetchFacebookPageData } from './services/facebookService.js';
 import { mergeAndFormatData } from './utils/dataFormatter.js';
+import { getApiCacheStats, clearApiCache } from './utils/apiMiddleware.js';
 import path from 'path';
 import { fileURLToPath } from 'url';
 import axios from 'axios';
@@ -15,13 +16,18 @@ const __dirname = path.dirname(__filename);
 // Load environment variables from parent directory
 dotenv.config({ path: path.resolve(__dirname, '../.env') });
 
+// Set environment variables for data fetching - No mock data at all
+process.env.USE_MOCK_DATA = 'false';
+process.env.USE_MOCK_DATA_FALLBACK = 'false';
+
 const app = express();
 
 const corsOptions = {
   origin: [
     'http://localhost:3000',
     'http://localhost:3001',
-    'https://marketing-insights-dashboard-for-plumbing-company.vercel.app'
+    'https://marketing-insights-dashboard-for-plumbing-company.vercel.app',
+    'https://perfect-light-production.up.railway.app'
   ],
   credentials: true
 };
@@ -99,13 +105,24 @@ app.get('/api/marketing-data', async (req, res) => {
 // Google Ads specific endpoint
 app.get('/api/google-ads-data', async (req, res) => {
   try {
-    const { startDate, endDate } = req.query;
+    const { startDate, endDate, forceRefresh } = req.query;
     
     if (!startDate || !endDate) {
       return res.status(400).json({ error: 'Both startDate and endDate are required query parameters' });
     }
     
-    const googleAdsData = await fetchGoogleAdsData(startDate, endDate);
+    // Convert forceRefresh string to boolean
+    const shouldForceRefresh = forceRefresh === 'true';
+    if (shouldForceRefresh) {
+      console.log('Forcing refresh of Google Ads data cache');
+    }
+    
+    const googleAdsData = await fetchGoogleAdsData(
+      startDate,
+      endDate,
+      shouldForceRefresh
+    );
+    
     res.json(googleAdsData);
   } catch (error) {
     console.error('Error fetching Google Ads data:', error);
@@ -152,13 +169,24 @@ app.get('/api/google-ads-data', async (req, res) => {
 // Facebook Ads specific endpoint
 app.get('/api/facebook-ads-data', async (req, res) => {
   try {
-    const { startDate, endDate } = req.query;
+    const { startDate, endDate, forceRefresh } = req.query;
     
     if (!startDate || !endDate) {
       return res.status(400).json({ error: 'Both startDate and endDate are required query parameters' });
     }
     
-    const facebookAdsData = await fetchFacebookAdsData(startDate, endDate);
+    // Convert forceRefresh string to boolean
+    const shouldForceRefresh = forceRefresh === 'true';
+    if (shouldForceRefresh) {
+      console.log('Forcing refresh of Facebook Ads data cache');
+    }
+    
+    const facebookAdsData = await fetchFacebookAdsData(
+      startDate, 
+      endDate, 
+      shouldForceRefresh
+    );
+    
     res.json(facebookAdsData);
   } catch (error) {
     console.error('Error fetching Facebook Ads data:', error);
@@ -173,7 +201,7 @@ app.get('/api/facebook-ads-data', async (req, res) => {
 // Facebook Page specific endpoint
 app.get('/api/facebook-page-data', async (req, res) => {
   try {
-    const { startDate, endDate } = req.query;
+    const { startDate, endDate, forceRefresh } = req.query;
     
     if (!startDate || !endDate) {
       return res.status(400).json({ error: 'Both startDate and endDate are required query parameters' });
@@ -188,7 +216,18 @@ app.get('/api/facebook-page-data', async (req, res) => {
       });
     }
     
-    const facebookPageData = await fetchFacebookPageData(pageId, startDate, endDate);
+    // Convert forceRefresh string to boolean
+    const shouldForceRefresh = forceRefresh === 'true';
+    if (shouldForceRefresh) {
+      console.log('Forcing refresh of Facebook Page data cache');
+    }
+    
+    const facebookPageData = await fetchFacebookPageData(
+      pageId, 
+      startDate, 
+      endDate, 
+      shouldForceRefresh
+    );
     res.json(facebookPageData);
   } catch (error) {
     console.error('Error fetching Facebook Page data:', error);
@@ -200,9 +239,94 @@ app.get('/api/facebook-page-data', async (req, res) => {
   }
 });
 
+// Get current Facebook Page follower count
+app.get('/api/facebook-page-followers', async (req, res) => {
+  try {
+    const pageId = process.env.FACEBOOK_PAGE_ID;
+    
+    if (!pageId) {
+      return res.status(500).json({ 
+        error: 'Missing Facebook Page ID',
+        details: 'FACEBOOK_PAGE_ID environment variable is not set'
+      });
+    }
+    
+    // Try the Graph API token first, fall back to regular access token
+    let accessToken = process.env.FACEBOOK_GRAPH_API_TOKEN || process.env.FACEBOOK_ACCESS_TOKEN;
+    
+    if (!accessToken) {
+      return res.status(500).json({
+        error: 'Missing Facebook access token',
+        details: 'Neither FACEBOOK_GRAPH_API_TOKEN nor FACEBOOK_ACCESS_TOKEN environment variables are set'
+      });
+    }
+    
+    console.log(`Fetching real follower count for Facebook Page ID: ${pageId}`);
+    
+    // Make a direct API call to get current follower count
+    const response = await axios.get(`https://graph.facebook.com/v19.0/${pageId}`, {
+      params: {
+        fields: 'name,fan_count',
+        access_token: accessToken
+      }
+    });
+    
+    console.log('Facebook Page API Response:', JSON.stringify(response.data, null, 2));
+    
+    res.json({
+      pageId: pageId,
+      name: response.data.name || 'Unknown',
+      followers: response.data.fan_count || 0,
+      timestamp: new Date().toISOString()
+    });
+  } catch (error) {
+    console.error('Error fetching Facebook Page followers:', error.response?.data || error.message);
+    res.status(500).json({
+      error: 'Failed to fetch Facebook Page followers',
+      details: error.response?.data?.error?.message || error.message,
+      mock: false
+    });
+  }
+});
+
 // Health check endpoint
 app.get('/health', (req, res) => {
   res.status(200).json({ status: 'healthy', timestamp: new Date().toISOString() });
+});
+
+// API status and cache management endpoint
+app.get('/api/status', (req, res) => {
+  // Get cache statistics
+  const cacheStats = getApiCacheStats();
+  
+  // Check if clearCache parameter is provided
+  if (req.query.clearCache === 'true') {
+    const clearedEntries = clearApiCache();
+    cacheStats.clearedEntries = clearedEntries;
+    cacheStats.cacheCleared = true;
+  }
+  
+  // Build response with environment info (safe to expose)
+  res.json({
+    status: 'operational',
+    timestamp: new Date().toISOString(),
+    environment: process.env.NODE_ENV || 'development',
+    apiVersion: '1.0.0',
+    cache: {
+      enabled: true,
+      entries: cacheStats.totalEntries,
+      sizeKB: Math.round(cacheStats.totalSizeBytes / 1024),
+      oldestEntryAgeMinutes: Math.round(cacheStats.oldestEntryAge / (1000 * 60)),
+    },
+    services: {
+      facebook: process.env.FACEBOOK_ACCESS_TOKEN ? 'configured' : 'not configured',
+      googleAds: process.env.GOOGLE_ADS_REFRESH_TOKEN ? 'configured' : 'not configured'
+    },
+    mockData: {
+      enabled: process.env.USE_MOCK_DATA === 'true',
+      fallbackEnabled: process.env.USE_MOCK_DATA_FALLBACK === 'true'
+    }
+  });
 });
 
 // Google OAuth callback endpoint
@@ -338,8 +462,10 @@ console.log('Environment variables:', {
 });
 
 const PORT = process.env.PORT || 3001;
-app.listen(PORT, () => {
-  console.log(`Marketing API server running on port ${PORT}`);
+const HOST = '0.0.0.0'; // Bind to all interfaces for Railway
+
+app.listen(PORT, HOST, () => {
+  console.log(`Marketing API server running on ${HOST}:${PORT}`);
 });
 
 export default app; // For testing purposes
