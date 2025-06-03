@@ -1,4 +1,5 @@
 import { GoogleAdsApi } from 'google-ads-api';
+import { cachedRequest } from '../utils/apiMiddleware.js';
 
 // Validate required Google Ads credentials
 const validateGoogleAdsCredentials = () => {
@@ -90,9 +91,10 @@ const initGoogleAdsClient = () => {
  * 
  * @param {string} startDate - Start date in YYYY-MM-DD format
  * @param {string} endDate - End date in YYYY-MM-DD format
+ * @param {boolean} forceRefresh - Whether to bypass cache and force a fresh API request
  * @returns {Promise<Array>} - Array of formatted Google Ads data
  */
-export async function fetchGoogleAdsData(startDate, endDate) {
+export async function fetchGoogleAdsData(startDate, endDate, forceRefresh = false) {
   try {
     // Check if we're explicitly told to use mock data
     if (process.env.USE_MOCK_DATA === 'true') {

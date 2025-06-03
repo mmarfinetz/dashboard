@@ -3,6 +3,12 @@
  * 
  * This script tests the validity of Google Ads API credentials
  * without making actual API calls to ad data.
+ * 
+ * NOTE: This file has been moved to the consolidated test directory at:
+ * /tests/utils/credentialsDiagnostic.js
+ * 
+ * Please use the new version instead:
+ * npm run test:google
  */
 
 import { GoogleAdsApi } from 'google-ads-api';

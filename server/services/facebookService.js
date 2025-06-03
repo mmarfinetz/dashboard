@@ -1,13 +1,15 @@
 import axios from 'axios';
+import { cachedRequest } from '../utils/apiMiddleware.js';
 
 /**
  * Fetches Facebook Ads data for the specified date range
  * 
  * @param {string} startDate - Start date in YYYY-MM-DD format
  * @param {string} endDate - End date in YYYY-MM-DD format
+ * @param {boolean} forceRefresh - Whether to bypass cache and force a fresh API request
  * @returns {Promise<Array>} - Array of formatted Facebook Ads data
  */
-export async function fetchFacebookAdsData(startDate, endDate) {
+export async function fetchFacebookAdsData(startDate, endDate, forceRefresh = false) {
   try {
     // Check if we should use mock data
     if (process.env.USE_MOCK_DATA === 'true') {
@@ -36,7 +38,8 @@ export async function fetchFacebookAdsData(startDate, endDate) {
     
     // Create params for the insights request
     const params = {
-      level: 'account',
+      level: 'campaign',
+      campaign_ids: ['23846212577230793'], // Target specific campaign ID
       fields: 'account_name,campaign_name,campaign_id,spend,impressions,clicks,cpc,ctr,reach,actions,date_start,date_stop',
       time_range: JSON.stringify({
         since: startDate,
@@ -46,13 +49,24 @@ export async function fetchFacebookAdsData(startDate, endDate) {
       access_token: accessToken
     };
     
-    // Fetch insights from Facebook API
+    // Fetch insights from Facebook API with caching and retry logic
     const url = `https://graph.facebook.com/v19.0/act_${cleanAccountId}/insights`;
     
     console.log('Making request to:', url);
-    console.log('With params:', JSON.stringify(params, null, 2));
+    console.log('With params:', JSON.stringify({...params, access_token: '[REDACTED]'}, null, 2));
     
-    const response = await axios.get(url, { params });
+    // Use cached request with retry logic
+    const responseData = await cachedRequest({
+      url,
+      params,
+      cacheKey: `fb-ads-${cleanAccountId}-${startDate}-${endDate}`,
+      cacheTTL: 15 * 60 * 1000, // 15 minutes cache
+      maxRetries: 3,
+      forceRefresh
+    });
+    
+    // Create a response-like structure to match the existing code
+    const response = { data: responseData };
     
     if (!response.data) {
       console.error('No data in Facebook API response');
@@ -62,6 +76,19 @@ export async function fetchFacebookAdsData(startDate, endDate) {
     console.log('Facebook API Response:', JSON.stringify(response.data, null, 2));
     
     const data = response.data.data || [];
+    
+    // Debug log for date range
+    if (data.length > 0) {
+      console.log('Facebook data date range:', 
+        `${data[0].date_start} to ${data[data.length-1].date_stop} (${data.length} days)`);
+    } else {
+      console.warn('Facebook API returned empty dataset');
+    }
+    
+    // Check if data is limited (possible token issue)
+    if (data.length > 0 && data.length < 10) {
+      console.warn(`Facebook API returned limited data (${data.length} days). Possible token permission issue.`);
+    }
     
     // Format response to match Dashboard.jsx expected format
     return data.map(row => {
@@ -101,11 +128,9 @@ export async function fetchFacebookAdsData(startDate, endDate) {
   } catch (error) {
     console.error('Error fetching Facebook Ads data:', error.response ? error.response.data : error.message);
     
-    // Only fallback to mock data if USE_MOCK_DATA_FALLBACK is enabled
-    if (process.env.USE_MOCK_DATA_FALLBACK === 'true') {
-      console.warn('Falling back to mock Facebook Ads data due to error');
-      return generateMockFacebookAdsData(startDate, endDate);
-    }
+    // Do not use mock data fallback at all
+    console.error('Facebook Ads data fetch failed and mock data is disabled');
+    // Propagate the error to show real error messages
     
     // Otherwise, propagate the error
     throw new Error(`Failed to fetch Facebook Ads data: ${error.message}`);
@@ -118,9 +143,10 @@ export async function fetchFacebookAdsData(startDate, endDate) {
  * @param {string} pageId - Facebook Page ID
  * @param {string} startDate - Start date in YYYY-MM-DD format
  * @param {string} endDate - End date in YYYY-MM-DD format
+ * @param {boolean} forceRefresh - Whether to bypass cache and force a fresh API request
  * @returns {Promise<Array>} - Array of Facebook Page insights data
  */
-export async function fetchFacebookPageData(pageId, startDate, endDate) {
+export async function fetchFacebookPageData(pageId, startDate, endDate, forceRefresh = false) {
   try {
     // Check if we should use mock data
     if (process.env.USE_MOCK_DATA === 'true') {
@@ -151,10 +177,12 @@ export async function fetchFacebookPageData(pageId, startDate, endDate) {
       'page_engaged_users',
       'page_post_engagements',
       'page_fans',
-      'page_views_total'
+      'page_fan_adds',
+      'page_views_total',
+      'page_negative_feedback'
     ].join(',');
     
-    // Fetch page insights
+    // Fetch page insights using cached request with retry logic
     const url = `https://graph.facebook.com/v19.0/${pageId}/insights`;
     const params = {
       metric: metrics,
@@ -167,7 +195,17 @@ export async function fetchFacebookPageData(pageId, startDate, endDate) {
     console.log('Making request to:', url);
     console.log('With params:', JSON.stringify({...params, access_token: '[REDACTED]'}, null, 2));
     
-    const response = await axios.get(url, { params });
+    const responseData = await cachedRequest({
+      url,
+      params,
+      cacheKey: `fb-page-${pageId}-${startDate}-${endDate}`,
+      cacheTTL: 30 * 60 * 1000, // 30 minutes cache
+      maxRetries: 3,
+      forceRefresh
+    });
+    
+    // Create a response-like structure to match the existing code
+    const response = { data: responseData };
     
     if (!response.data) {
       console.error('No data in Facebook Page API response');
@@ -212,11 +250,9 @@ export async function fetchFacebookPageData(pageId, startDate, endDate) {
   } catch (error) {
     console.error('Error fetching Facebook Page data:', error.response ? error.response.data : error.message);
     
-    // Only fallback to mock data if USE_MOCK_DATA_FALLBACK is enabled
-    if (process.env.USE_MOCK_DATA_FALLBACK === 'true') {
-      console.warn('Falling back to mock Facebook Page data due to error');
-      return generateMockFacebookPageData(startDate, endDate);
-    }
+    // Do not use mock data fallback at all
+    console.error('Facebook Page data fetch failed and mock data is disabled');
+    // Propagate the error to show real error messages
     
     // Otherwise, propagate the error
     throw new Error(`Failed to fetch Facebook Page data: ${error.message}`);
