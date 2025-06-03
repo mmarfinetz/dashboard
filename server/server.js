@@ -1,10 +1,6 @@
 import express from 'express';
 import cors from 'cors';
 import dotenv from 'dotenv';
-import { fetchGoogleAdsData } from './services/googleAdsService.js';
-import { fetchFacebookAdsData, fetchFacebookPageData } from './services/facebookService.js';
-import { mergeAndFormatData } from './utils/dataFormatter.js';
-import { getApiCacheStats, clearApiCache } from './utils/apiMiddleware.js';
 import path from 'path';
 import { fileURLToPath } from 'url';
 import axios from 'axios';
@@ -20,6 +16,62 @@ dotenv.config({ path: path.resolve(__dirname, '../.env') });
 process.env.USE_MOCK_DATA = 'false';
 process.env.USE_MOCK_DATA_FALLBACK = 'false';
 
+// Import services with error handling
+let fetchGoogleAdsData, fetchFacebookAdsData, fetchFacebookPageData;
+let mergeAndFormatData, getApiCacheStats, clearApiCache;
+
+try {
+  const googleAdsModule = await import('./services/googleAdsService.js');
+  fetchGoogleAdsData = googleAdsModule.fetchGoogleAdsData;
+  console.log('✓ Google Ads service imported successfully');
+} catch (error) {
+  console.error('⚠️ Failed to import Google Ads service:', error.message);
+  // Create a fallback function that returns mock data with error indication
+  fetchGoogleAdsData = async () => {
+    throw new Error(`Google Ads service unavailable: ${error.message}`);
+  };
+}
+
+try {
+  const facebookModule = await import('./services/facebookService.js');
+  fetchFacebookAdsData = facebookModule.fetchFacebookAdsData;
+  fetchFacebookPageData = facebookModule.fetchFacebookPageData;
+  console.log('✓ Facebook service imported successfully');
+} catch (error) {
+  console.error('⚠️ Failed to import Facebook service:', error.message);
+  // Create fallback functions
+  fetchFacebookAdsData = async () => {
+    throw new Error(`Facebook Ads service unavailable: ${error.message}`);
+  };
+  fetchFacebookPageData = async () => {
+    throw new Error(`Facebook Page service unavailable: ${error.message}`);
+  };
+}
+
+try {
+  const dataFormatterModule = await import('./utils/dataFormatter.js');
+  mergeAndFormatData = dataFormatterModule.mergeAndFormatData;
+  console.log('✓ Data formatter imported successfully');
+} catch (error) {
+  console.error('⚠️ Failed to import data formatter:', error.message);
+  mergeAndFormatData = (googleData, facebookData) => ({
+    error: 'Data formatter unavailable',
+    googleData: googleData || [],
+    facebookData: facebookData || []
+  });
+}
+
+try {
+  const apiMiddlewareModule = await import('./utils/apiMiddleware.js');
+  getApiCacheStats = apiMiddlewareModule.getApiCacheStats;
+  clearApiCache = apiMiddlewareModule.clearApiCache;
+  console.log('✓ API middleware imported successfully');
+} catch (error) {
+  console.error('⚠️ Failed to import API middleware:', error.message);
+  getApiCacheStats = () => ({ totalEntries: 0, totalSizeBytes: 0, oldestEntryAge: 0 });
+  clearApiCache = () => 0;
+}
+
 const app = express();
 
 const corsOptions = {
@@ -34,6 +86,20 @@ const corsOptions = {
 
 app.use(cors(corsOptions));
 app.use(express.json());
+
+// Add a startup status endpoint
+app.get('/startup-status', (req, res) => {
+  res.json({
+    status: 'operational',
+    timestamp: new Date().toISOString(),
+    services: {
+      googleAds: fetchGoogleAdsData.toString().includes('unavailable') ? 'failed' : 'loaded',
+      facebook: fetchFacebookAdsData.toString().includes('unavailable') ? 'failed' : 'loaded',
+      dataFormatter: mergeAndFormatData.toString().includes('unavailable') ? 'failed' : 'loaded',
+      apiMiddleware: getApiCacheStats.toString().includes('0') ? 'failed' : 'loaded'
+    }
+  });
+});
 
 // Combined data endpoint
 app.get('/api/marketing-data', async (req, res) => {
