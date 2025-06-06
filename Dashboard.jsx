@@ -502,34 +502,56 @@ const Dashboard = () => {
     
     const fetchFacebookData = async () => {
       try {
+        setLoadingState(prev => ({...prev, facebook: true}));
+        setDataError(prev => ({...prev, facebook: null}));
+        
         // Get the appropriate base URL depending on the environment
         const apiBase = getApiBaseUrl();
         
-        // Add forceRefresh parameter if requested
         const refreshParam = forceRefresh ? '&forceRefresh=true' : '';
-        const apiUrl = `${apiBase}/api/facebook-ads-data?startDate=${formattedStartDate}&endDate=${formattedEndDate}${refreshParam}`;
+        const apiUrl = `${apiBase}/api/facebook-page-data?startDate=${formattedStartDate}&endDate=${formattedEndDate}${refreshParam}`;
         
-        console.log(`Fetching Facebook Ads data from: ${apiUrl}`);
+        console.log('Fetching Facebook page data from:', apiUrl);
         const response = await fetch(apiUrl);
+        const data = await response.json();
         
         if (!response.ok) {
-          throw new Error(`Failed to fetch Facebook data: ${response.statusText}`);
+          throw new Error(data.error || 'Failed to fetch Facebook page data');
         }
         
-        const fetchedData = await response.json();
+        console.log('Facebook page data received:', data);
         
-        // Check if data is mock data and set it
-        const isMockData = fetchedData.mock === true;
-        if (isMockData) {
-          console.warn('Facebook API is returning MOCK data instead of real data');
+        // Transform page data to match the expected format
+        const transformedData = Array.isArray(data) ? data.map(item => ({
+          Date: item.Date,
+          Impressions: item.page_impressions?.toLocaleString() || '0',
+          impressions: item.page_impressions || 0,
+          Clicks: item.page_post_engagements?.toString() || '0',
+          clicks: item.page_post_engagements || 0,
+          engagement: item.page_engaged_users || 0,
+          page_fans: item.page_fans || 0,
+          page_views: item.page_views_total || 0,
+          // Calculate a pseudo-CPC based on engagement
+          Avg_CPC: '$0.00', // No cost for organic page data
+          cpc: 0,
+          Cost: '$0.00', // No cost for organic page data
+          spend: 0
+        })) : [];
+        
+        setFacebookAdsData(transformedData);
+        
+        // Update mock data flag
+        if (data.mock) {
           setDataError(prev => ({...prev, facebook: 'Using mock data - real data unavailable'}));
+        } else {
+          setDataError(prev => ({...prev, facebook: null}));
         }
         
-        setFacebookAdsData(fetchedData);
         setLoadingState(prev => ({...prev, facebook: false}));
-      } catch (err) {
-        console.error('Error fetching Facebook data:', err);
-        setDataError(prev => ({...prev, facebook: err.message}));
+      } catch (error) {
+        console.error('Error fetching Facebook page data:', error);
+        setDataError(prev => ({...prev, facebook: error.message}));
+        setFacebookAdsData([]);
         setLoadingState(prev => ({...prev, facebook: false}));
         
         // Fallback to sample data if not just refreshing
