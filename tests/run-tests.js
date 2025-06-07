@@ -193,13 +193,18 @@ async function main() {
     return;
   }
   
+  let success;
+
   if (testName === 'all') {
-    await runAllTests();
+    success = await runAllTests();
   } else if (testName === 'interactive') {
     showInteractiveMenu();
+    return;
   } else {
-    await runTest(testName);
+    success = await runTest(testName);
   }
+
+  process.exit(success ? 0 : 1);
 }
 
 // Run the main function
