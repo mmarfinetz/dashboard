@@ -1,1 +1,2 @@
-/Users/mitch/Downloads/MarfinetzPlumbing/tests/run-tests.js
+#!/usr/bin/env node
+import './tests/run-tests.js';
