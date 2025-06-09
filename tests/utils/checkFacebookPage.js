@@ -15,7 +15,7 @@ if (!process.env.FACEBOOK_ACCESS_TOKEN) {
 }
 
 async function checkFacebookPageAccess() {
-  const pageId = process.env.FACEBOOK_PAGE_ID || '476439392229934';
+  const pageId = process.env.FACEBOOK_PAGE_ID || '476439392229934'; // Default to known working page ID
   const accessToken = process.env.FACEBOOK_ACCESS_TOKEN;
 
   console.log('====== Facebook Page Access Check ======\n');
@@ -135,7 +135,7 @@ async function checkFacebookPageAccess() {
   }
 
   console.log('\n====== Recommendations ======');
-  console.log('1. Make sure you have the correct Page ID (61572431044574)');
+  console.log('1. Make sure you have the correct Page ID (476439392229934)');
   console.log('2. Ensure your access token has pages_read_engagement permission');
   console.log('3. If using a User Access Token, make sure you have admin access to the page');
   console.log('4. Consider using a Page Access Token instead of a User Access Token');

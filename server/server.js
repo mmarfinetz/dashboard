@@ -12,9 +12,8 @@ const __dirname = path.dirname(__filename);
 // Load environment variables from parent directory
 dotenv.config({ path: path.resolve(__dirname, '../.env') });
 
-// Set environment variables for data fetching - No mock data at all
-process.env.USE_MOCK_DATA = 'false';
-process.env.USE_MOCK_DATA_FALLBACK = 'false';
+// Set environment variables for data fetching with fallback to mock data if APIs fail
+process.env.USE_MOCK_DATA = 'false';  // Don't use mock data by default
 
 // Import services with error handling
 let fetchGoogleAdsData, fetchFacebookAdsData, fetchFacebookPageData;
@@ -79,7 +78,9 @@ const corsOptions = {
     'http://localhost:3000',
     'http://localhost:3001',
     'https://marketing-insights-dashboard-for-plumbing-company.vercel.app',
-    'https://perfect-light-production.up.railway.app'
+    'https://perfect-light-production.up.railway.app',
+    // Allow all origins in production to prevent CORS issues
+    '*'
   ],
   credentials: true
 };
@@ -273,13 +274,15 @@ app.get('/api/facebook-page-data', async (req, res) => {
       return res.status(400).json({ error: 'Both startDate and endDate are required query parameters' });
     }
     
-    const pageId = process.env.FACEBOOK_PAGE_ID;
+    // Use the correct page ID with fallback
+    let pageId = process.env.FACEBOOK_PAGE_ID;
     
+    // Set a default to the correct page ID if not provided
     if (!pageId) {
-      return res.status(500).json({ 
-        error: 'Missing Facebook Page ID',
-        details: 'FACEBOOK_PAGE_ID environment variable is not set'
-      });
+      pageId = '476439392229934'; // Known working page ID
+      console.log('Using default Facebook Page ID:', pageId);
+    } else {
+      console.log('Using configured Facebook Page ID:', pageId);
     }
     
     // Convert forceRefresh string to boolean
@@ -407,12 +410,20 @@ app.get('/auth/google/callback', async (req, res) => {
     console.log('Received authorization code:', code.substring(0, 10) + '...');
     
     // Exchange the authorization code for tokens
+    // Determine the redirect URI based on environment
+    const isProduction = process.env.NODE_ENV === 'production';
+    const redirectUri = isProduction 
+      ? 'https://perfect-light-production.up.railway.app/auth/google/callback'
+      : 'http://localhost:3001/auth/google/callback';
+      
+    console.log('Using redirect URI:', redirectUri);
+    
     const tokenResponse = await axios.post('https://oauth2.googleapis.com/token', 
       new URLSearchParams({
         code,
         client_id: process.env.GOOGLE_ADS_CLIENT_ID,
         client_secret: process.env.GOOGLE_ADS_CLIENT_SECRET,
-        redirect_uri: 'http://localhost:3001/auth/google/callback',
+        redirect_uri: redirectUri,
         grant_type: 'authorization_code'
       }).toString(),
       {
@@ -513,6 +524,12 @@ app.get('/auth/google/callback', async (req, res) => {
 });
 
 // Log environment variables for debugging
+// Fix Facebook Page ID if it's the old incorrect one
+if (process.env.FACEBOOK_PAGE_ID === '61572431044574') {
+  console.log('⚠️ Correcting Facebook Page ID from 61572431044574 to 476439392229934');
+  process.env.FACEBOOK_PAGE_ID = '476439392229934';
+}
+
 console.log('Environment variables:', {
   NODE_ENV: process.env.NODE_ENV,
   USE_MOCK_DATA: process.env.USE_MOCK_DATA,

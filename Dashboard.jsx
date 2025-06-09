@@ -4,18 +4,12 @@ import FacebookDashboard from './FacebookDashboard';
 
 // Helper function to determine the appropriate API base URL based on the environment
 const getApiBaseUrl = () => {
-  // For now, always use the local server since Railway is down
-  return 'http://localhost:3001';
-  
-  // Once Railway is fixed, use this code:
-  /*
   const isProduction = window.location.hostname !== 'localhost';
   if (isProduction) {
     return 'https://perfect-light-production.up.railway.app';
   } else {
     return 'http://localhost:3001';
   }
-  */
 };
 
 const GoogleAdsDashboard = ({ preloadedData, isLoading: parentLoading, error: parentError }) => {

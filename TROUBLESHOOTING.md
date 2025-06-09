@@ -66,9 +66,14 @@ If you're experiencing issues with the dashboard, follow these steps first:
 
 3. **Check API status**
    ```
-   # Check API server status and configuration
+   # Check API server status and configuration (local)
    curl http://localhost:3001/api/status
+   
+   # Check API server status and configuration (production)
+   curl https://perfect-light-production.up.railway.app/api/status
    ```
+   
+   ⚠️ **IMPORTANT**: The dashboard now uses the production backend URL (`https://perfect-light-production.up.railway.app`) when deployed and the local URL (`http://localhost:3001`) during local development.
 
 4. **Use the dashboard refresh button**
    The dashboard includes a refresh button to fetch fresh data without clearing the entire cache.
@@ -138,11 +143,17 @@ If your refresh token is expired or invalid, you'll need to generate a new one:
 Test the individual endpoints to isolate which service is causing problems:
 
 ```bash
-# Test Google Ads endpoint
+# Test Google Ads endpoint (local)
 curl "http://localhost:3001/api/google-ads-data?startDate=$(date -v-30d +%Y-%m-%d)&endDate=$(date +%Y-%m-%d)"
 
-# Test Facebook endpoint
+# Test Google Ads endpoint (production)
+curl "https://perfect-light-production.up.railway.app/api/google-ads-data?startDate=$(date -v-30d +%Y-%m-%d)&endDate=$(date +%Y-%m-%d)"
+
+# Test Facebook endpoint (local)
 curl "http://localhost:3001/api/facebook-ads-data?startDate=$(date -v-30d +%Y-%m-%d)&endDate=$(date +%Y-%m-%d)"
+
+# Test Facebook endpoint (production)
+curl "https://perfect-light-production.up.railway.app/api/facebook-ads-data?startDate=$(date -v-30d +%Y-%m-%d)&endDate=$(date +%Y-%m-%d)"
 ```
 
 ### 6. Temporary Workarounds
@@ -164,6 +175,18 @@ npm run test:facebook
 
 This will test your credentials and help diagnose common issues.
 
+### Production Backend URL
+
+This application is now configured to use the deployed backend at:
+```
+https://perfect-light-production.up.railway.app
+```
+
+This change means:
+- When running locally, the dashboard will use the local API server at `http://localhost:3001`
+- When deployed, the dashboard will automatically connect to the production API server
+- You need to ensure the Railway deployment is running for production use
+
 ### Common Facebook API Issues
 
 If Facebook API calls are failing or returning only old data (e.g., data from March 31 and April 1):
@@ -183,11 +206,16 @@ If Facebook API calls are failing or returning only old data (e.g., data from Ma
 4. **Ad Account Status**:
    - If your ad account is paused or restricted, you may see only historical data
 
-5. **Check your Facebook credentials**:
+5. **Important: Use the correct Facebook Page ID**:
+   - The system now defaults to Page ID: 476439392229934
+   - The previously used ID (61572431044574) is incorrect and will not work
+   - The system will automatically correct this during startup
+
+6. **Check your Facebook credentials**:
    ```
    FACEBOOK_ACCESS_TOKEN=your-access-token
    FACEBOOK_AD_ACCOUNT_ID=act_1234567890
-   FACEBOOK_PAGE_ID=your-page-id
+   FACEBOOK_PAGE_ID=476439392229934  # Use this correct page ID!
    ```
 
 6. **Generate a new Long-Lived Token**:
@@ -200,7 +228,11 @@ If the dashboard isn't loading data properly or seems stuck:
 
 1. **Check API Status**
    ```
+   # Local API
    curl http://localhost:3001/api/status
+   
+   # Production API
+   curl https://perfect-light-production.up.railway.app/api/status
    ```
 
 2. **Review Server Logs**
@@ -230,12 +262,20 @@ If data seems stale or outdated:
 2. **Force Refresh for Specific Request**
    Add the `forceRefresh=true` parameter to API requests:
    ```
+   # Local API
    curl "http://localhost:3001/api/facebook-ads-data?startDate=2025-03-01&endDate=2025-05-31&forceRefresh=true"
+   
+   # Production API
+   curl "https://perfect-light-production.up.railway.app/api/facebook-ads-data?startDate=2025-03-01&endDate=2025-05-31&forceRefresh=true"
    ```
 
 3. **Check Cache Statistics**
    ```
+   # Local API
    curl http://localhost:3001/api/status
+   
+   # Production API
+   curl https://perfect-light-production.up.railway.app/api/status
    ```
    Look at the `cache` section to see how many entries are stored and their age
 
