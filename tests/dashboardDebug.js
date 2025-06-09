@@ -4,7 +4,10 @@
  * This utility script helps diagnose and fix issues with the Marketing Insights Dashboard.
  * It can test connectivity, check API configurations, and validate credentials.
  * 
- * Usage: node dashboardDebug.js [command]
+ * IMPORTANT: This script looks for Dashboard.jsx and FacebookDashboard.jsx in the main project
+ * directory (parent of the tests directory), not in the tests directory itself.
+ * 
+ * Usage: node tests/dashboardDebug.js [command]
  * Commands:
  *  - check-connectivity: Test if frontend can connect to API
  *  - test-api: Test API endpoints with sample requests
@@ -100,8 +103,10 @@ const checkFrontendConnections = () => {
   const files = ['Dashboard.jsx', 'FacebookDashboard.jsx'];
   let hardcodedUrls = [];
   
+  // Look for files in the main project directory (parent of tests directory)
   for (const file of files) {
-    const filePath = path.join(__dirname, file);
+    const filePath = path.join(__dirname, '..', file);
+    console.log(`Checking file: ${filePath}`);
     const content = fs.readFileSync(filePath, 'utf8');
     
     // Look for hardcoded localhost URLs
@@ -175,8 +180,10 @@ const fixHardcodedUrls = async () => {
   const files = ['Dashboard.jsx', 'FacebookDashboard.jsx'];
   let fixedFiles = 0;
   
+  // Look for files in the main project directory (parent of tests directory)
   for (const file of files) {
-    const filePath = path.join(__dirname, file);
+    const filePath = path.join(__dirname, '..', file);
+    console.log(`Updating file: ${filePath}`);
     let content = fs.readFileSync(filePath, 'utf8');
     
     // Check if the file already has the getApiBaseUrl function

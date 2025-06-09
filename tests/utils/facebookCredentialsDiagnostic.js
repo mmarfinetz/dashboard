@@ -15,7 +15,11 @@ const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 
 // Load environment variables
-dotenv.config({ path: path.resolve(__dirname, '../../server/.env') });
+dotenv.config({ path: path.resolve(__dirname, '../../.env') });
+// Fallback to server/.env if main .env doesn't have the required vars
+if (!process.env.FACEBOOK_ACCESS_TOKEN) {
+  dotenv.config({ path: path.resolve(__dirname, '../../server/.env') });
+}
 
 /**
  * Validate Facebook API Credentials

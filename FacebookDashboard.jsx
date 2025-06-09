@@ -3,18 +3,12 @@ import { LineChart, Line, BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, L
 
 // Helper function to determine the appropriate API base URL based on the environment
 const getApiBaseUrl = () => {
-  // For now, always use the local server since Railway is down
-  return 'http://localhost:3001';
-  
-  // Once Railway is fixed, use this code:
-  /*
   const isProduction = window.location.hostname !== 'localhost';
   if (isProduction) {
     return 'https://perfect-light-production.up.railway.app';
   } else {
     return 'http://localhost:3001';
   }
-  */
 };
 
 const FacebookDashboard = ({ preloadedData, isLoading: parentLoading, error: parentError }) => {
@@ -100,7 +94,7 @@ const FacebookDashboard = ({ preloadedData, isLoading: parentLoading, error: par
     } catch (err) {
       console.error('Error fetching follower count:', err);
       setFollowerError(err.message);
-      setFollowerCount(0); // Reset to 0 if error
+      setFollowerCount(0); // Don't use a hardcoded value
     }
   };
 
@@ -168,25 +162,31 @@ const FacebookDashboard = ({ preloadedData, isLoading: parentLoading, error: par
       // Get the appropriate base URL depending on the environment
       const apiBase = getApiBaseUrl();
       
-      // Fetch data from our API
-      const apiUrl = `${apiBase}/api/facebook-ads-data?startDate=${formattedStartDate}&endDate=${formattedEndDate}`;
+      // Fetch data from our API - try page data first since we don't have active ads
+      const apiUrl = `${apiBase}/api/facebook-page-data?startDate=${formattedStartDate}&endDate=${formattedEndDate}`;
       
-      console.log(`Fetching Facebook Ads data from: ${apiUrl}`);
+      console.log(`Fetching Facebook Page data from: ${apiUrl}`);
       const response = await fetch(apiUrl);
       
       if (!response.ok) {
         throw new Error(`Failed to fetch Facebook data: ${response.statusText}`);
       }
       
-      // Process the data or fall back to sample data if needed
+      // Process the data
       let processedData;
       try {
         const responseData = await response.json();
-        // Transform API data to match our expected format
-        processedData = transformApiData(responseData);
+        console.log('Facebook Page data response:', responseData);
+        
+        // Check if we got valid data back
+        if (!responseData || !Array.isArray(responseData) || responseData.length === 0) {
+          throw new Error('Facebook API returned empty dataset');
+        } else {
+          // Transform API data to match our expected format
+          processedData = transformApiData(responseData);
+        }
       } catch (dataError) {
         console.error('Error processing API data:', dataError);
-        // Don't use sample data, throw the error to be handled by the error handler
         throw new Error(`Failed to process Facebook data: ${dataError.message}`);
       }
       
@@ -205,13 +205,14 @@ const FacebookDashboard = ({ preloadedData, isLoading: parentLoading, error: par
       });
       
       setIsLoading(false);
+      setError(null); // Clear any existing errors
     } catch (err) {
       console.error('Error fetching Facebook data:', err);
-      setError(err.message);
-      setIsLoading(false);
       
-      // Display error instead of using sample data
-      handleFetchError(err.message);
+      // Show error instead of using sample data
+      setFbData([]);
+      setIsLoading(false);
+      setError(err.message || "Failed to load Facebook data");
     }
   };
   
@@ -232,54 +233,63 @@ const FacebookDashboard = ({ preloadedData, isLoading: parentLoading, error: par
     // If the API data doesn't have the fields we need, we need to transform it
     console.log('API data for transform:', apiData[0]); // Log the first item for debugging
     
-    // Verify that we have real data, not mock data
+    // Verify that we have real data
     if (!apiData || apiData.length === 0) {
       throw new Error('No data received from Facebook API');
     }
 
-    // Check if any required fields are missing
-    const requiredFields = ['Date', 'date_start', 'date'];
-    const hasRequiredFields = requiredFields.some(field => apiData[0] && (apiData[0][field] !== undefined));
+    // Make flexible field checking for Page data vs Ads data
+    // For page data, we might just have a Date field
+    const firstItem = apiData[0];
+    const hasDateField = firstItem && (firstItem.Date || firstItem.date_start || firstItem.date);
     
-    if (!hasRequiredFields) {
-      throw new Error('Facebook data is missing required fields');
+    if (!hasDateField) {
+      throw new Error('Facebook data is missing required date fields');
     }
 
-    return apiData.map(item => {
-      const date = new Date(item.Date || item.date_start || item.date);
-      
-      // Extract only real metrics - no defaults or random generation
-      const engagement = item.engagement || (item.page_engaged_users || 0);
-      const reach = item.reach || parseInt(item.Impressions?.replace(/,/g, '')) || parseInt(item.page_impressions) || 0;
-      
-      // Extract campaign name if available
-      const campaignName = item.campaign_name || "Default Campaign";
-      
-      // Use only real data for views
-      const views = item.page_views_total || 0;
-      
-      // Only track new follows per day, not total follower count
-      // Since the page_fans field is the total count, not daily new follows
-      const newFollows = item.page_fan_adds || 0;
-      
-      return {
-        date: date.toLocaleDateString(),
-        displayDate: date.toLocaleDateString('en-US', { month: 'short', day: 'numeric' }),
-        dayOfWeek: date.getDay(),
-        week: Math.ceil((date.getDate() / 7)),
-        campaignName: campaignName,
-        reach: reach,
-        impressions: parseInt(item.Impressions?.replace(/,/g, '')) || parseInt(item.impressions) || parseInt(item.page_impressions) || 0,
-        interactions: engagement,
-        linkClicks: item.Clicks ? parseInt(item.Clicks) : parseInt(item.clicks) || 0,
-        newFollows: newFollows,
-        visits: item.page_views_total || 0,
-        engagementRate: reach > 0 ? ((engagement / reach) * 100).toFixed(2) : "0.00",
-        engagements: engagement,
-        views: views,
-        negativeFeedback: item.negative_feedback || 0
-      };
-    });
+    try {
+      return apiData.map(item => {
+        // For Date field, accept any available date format
+        let dateStr = item.Date || item.date_start || item.date;
+        if (!dateStr && item.message && item.message.includes("current")) {
+          // If we're showing "current statistics" we'll use today's date
+          dateStr = new Date().toISOString().split('T')[0];
+        }
+        
+        const date = new Date(dateStr);
+        
+        // Extract metrics - only use real values, no estimations
+        const engagement = item.engagement || item.page_engaged_users || 0;
+        const reach = item.reach || parseInt(item.page_impressions) || 0;
+        const impressions = parseInt(item.impressions) || parseInt(item.page_impressions) || 0;
+        const campaignName = item.campaign_name || "Marfinetz Plumbing";
+        const views = item.page_views_total || 0;
+        const newFollows = item.page_fan_adds || 0;
+        const linkClicks = parseInt(item.Clicks || item.clicks || 0);
+        
+        return {
+          date: date.toLocaleDateString(),
+          displayDate: date.toLocaleDateString('en-US', { month: 'short', day: 'numeric' }),
+          dayOfWeek: date.getDay(),
+          week: Math.ceil((date.getDate() / 7)),
+          campaignName: campaignName,
+          reach: reach,
+          impressions: impressions,
+          interactions: engagement,
+          linkClicks: linkClicks,
+          newFollows: newFollows,
+          visits: views,
+          engagementRate: reach > 0 ? ((engagement / reach) * 100).toFixed(2) : "0.00",
+          engagements: engagement,
+          views: views,
+          negativeFeedback: item.negative_feedback || 0,
+          follows: item.page_fans || 0
+        };
+      });
+    } catch (error) {
+      console.error('Error transforming API data:', error);
+      throw new Error('Failed to transform Facebook data: ' + error.message);
+    }
   };
   
   // Generate sample data that resembles Facebook analytics data
@@ -499,18 +509,11 @@ const FacebookDashboard = ({ preloadedData, isLoading: parentLoading, error: par
   }
 
   if (error) {
-    // Check if error is about mock data
-    const isMockDataError = error.includes('mock data');
-    
     return (
-      <div className={isMockDataError ? "bg-yellow-50 p-4 rounded-lg text-yellow-800" : "bg-red-50 p-4 rounded-lg text-red-800"}>
-        <h2 className="text-xl font-bold">{isMockDataError ? "Using Mock Data" : "Error Loading Data"}</h2>
+      <div className="bg-red-50 p-4 rounded-lg text-red-800">
+        <h2 className="text-xl font-bold">Error Loading Facebook Data</h2>
         <p>{error}</p>
-        {isMockDataError ? (
-          <p className="mt-2 font-semibold">Mock data is being displayed because real data couldn't be loaded. The app will automatically use real data when it becomes available.</p>
-        ) : (
-          <p className="mt-2 font-semibold">No mock data is being displayed. Please fix the connection issues to see real data.</p>
-        )}
+        <p className="mt-2 font-semibold">Please check the Facebook API connection and credentials.</p>
       </div>
     );
   }
@@ -528,7 +531,7 @@ const FacebookDashboard = ({ preloadedData, isLoading: parentLoading, error: par
       )}
       
       <div className="mb-8">
-        <h1 className="text-2xl font-bold text-gray-800 mb-4">MMW Contracting - Facebook Analytics Dashboard</h1>
+        <h1 className="text-2xl font-bold text-gray-800 mb-4">Marfinetz Plumbing - Facebook Analytics Dashboard</h1>
         
         <div className="bg-white p-4 rounded-lg shadow-md mb-6">
           <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-4">

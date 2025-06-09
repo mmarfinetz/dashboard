@@ -19,7 +19,10 @@
     "test:railway": "node tests/run-tests.js railway",
     "test:facebook": "node tests/run-tests.js facebook",
     "test:google": "node tests/run-tests.js google",
-    "test:dashboard": "node tests/run-tests.js dashboard"
+    "test:dashboard": "node tests/run-tests.js dashboard",
+    "railway:setup": "node setup-railway-env.js",
+    "railway:fix": "node fix-railway-deployment.js",
+    "railway:check": "npm run test:railway && node fix-railway-deployment.js"
   },
   "dependencies": {
     "axios": "^1.9.0",
